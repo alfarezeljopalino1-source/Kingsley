@@ -884,6 +884,9 @@ export function setupIpcHandlers(mainWindow: BrowserWindow, ptyManager: PtyManag
   }
 
   lastMtime = getBuildStamp()
+  // Check for updates on a gentle 15-minute cadence in production (30s in dev)
+  // to prevent synchronous disk I/O from stuttering the main process event loop.
+  const checkIntervalMs = app.isPackaged ? 15 * 60 * 1000 : 30 * 1000
   const updateInterval = setInterval(() => {
     if (mainWindow.isDestroyed()) {
       clearInterval(updateInterval)
@@ -908,7 +911,7 @@ export function setupIpcHandlers(mainWindow: BrowserWindow, ptyManager: PtyManag
     } else if (!lastMtime && currentMtime) {
       lastMtime = currentMtime
     }
-  }, 3500)
+  }, checkIntervalMs)
 
   mainWindow.on('focus', () => {
     if (!mainWindow.isDestroyed()) {

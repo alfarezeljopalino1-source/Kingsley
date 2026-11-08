@@ -102,20 +102,22 @@ const SplitBranch: React.FC<SplitBranchProps> = ({
     const totalSize = isHorizontal ? rect.height : rect.width
     if (totalSize <= 0) return
 
+    let latestRatio = startRatio
+
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const delta = isHorizontal
         ? moveEvent.clientY - startY
         : moveEvent.clientX - startX
 
       const deltaRatio = delta / totalSize
-      const newRatio = Math.max(0.15, Math.min(0.85, startRatio + deltaRatio))
-      setDragRatio(newRatio)
-      onUpdateRatio(nodeRef.current, newRatio)
+      latestRatio = Math.max(0.15, Math.min(0.85, startRatio + deltaRatio))
+      setDragRatio(latestRatio)
     }
 
     const handleMouseUp = () => {
       setIsDragging(false)
       setDragRatio(null)
+      onUpdateRatio(nodeRef.current, latestRatio)
       window.removeEventListener('mousemove', handleMouseMove)
       window.removeEventListener('mouseup', handleMouseUp)
     }

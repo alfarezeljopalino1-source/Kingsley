@@ -354,14 +354,24 @@ export const AppContent: React.FC = () => {
   }, [tabs, panes])
 
   useEffect(() => {
-    localStorage.setItem(SESSION_TABS_STORAGE_KEY, JSON.stringify(tabs))
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem(SESSION_TABS_STORAGE_KEY, JSON.stringify(tabs))
+      } catch {}
+    }, 300)
+    return () => clearTimeout(timer)
   }, [tabs])
 
   useEffect(() => {
-    localStorage.setItem(
-      SESSION_PANES_STORAGE_KEY,
-      JSON.stringify(Array.from(panes.entries()))
-    )
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem(
+          SESSION_PANES_STORAGE_KEY,
+          JSON.stringify(Array.from(panes.entries()))
+        )
+      } catch {}
+    }, 300)
+    return () => clearTimeout(timer)
   }, [panes])
 
   const [activeTabId, setActiveTabId] = useState<string>(() => (tabs.length > 0 ? tabs[0].id : ''))
@@ -411,17 +421,8 @@ export const AppContent: React.FC = () => {
   const [isDraggingLeft, setIsDraggingLeft] = useState(false)
   const [isDraggingRight, setIsDraggingRight] = useState(false)
 
-  useEffect(() => {
-    localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, sidebarWidth.toString())
-  }, [sidebarWidth])
-
-  useEffect(() => {
-    localStorage.setItem(RIGHT_PANEL_WIDTH_STORAGE_KEY, rightPanelWidth.toString())
-  }, [rightPanelWidth])
-
-  useEffect(() => {
-    localStorage.setItem(TERMINAL_RIGHT_MARGIN_STORAGE_KEY, terminalRightMargin.toString())
-  }, [terminalRightMargin])
+  // Sidebar and right-panel widths are persisted on drag completion (handleMouseUp)
+  // to prevent synchronous localStorage writes on every mousemove pixel during resize.
 
   const [gitChanges, setGitChanges] = useState<GitFileChange[]>([])
   const [isRefreshingGit, setIsRefreshingGit] = useState(false)
@@ -747,7 +748,7 @@ export const AppContent: React.FC = () => {
 
   // Select Workspace Folder (Orca System)
   // Fetch git changes for active workspace
-  const refreshGitChanges = useCallback(async () => {
+  const refreshGitChanges = useCallback(async (manual = false) => {
     if (
       !activeWorkspace ||
       !activeWorkspace.path ||
@@ -757,14 +758,31 @@ export const AppContent: React.FC = () => {
       setGitChanges([])
       return
     }
-    setIsRefreshingGit(true)
+    if (manual) {
+      setIsRefreshingGit(true)
+    }
     try {
       const res = await window.ferminAPI.getGitStatus(activeWorkspace.path)
-      setGitChanges(res.files || [])
+      const nextFiles = res.files || []
+      setGitChanges((prev) => {
+        if (
+          prev.length === nextFiles.length &&
+          prev.every(
+            (f, i) =>
+              f.path === nextFiles[i].path &&
+              f.status === nextFiles[i].status
+          )
+        ) {
+          return prev
+        }
+        return nextFiles
+      })
     } catch {
       setGitChanges([])
     } finally {
-      setIsRefreshingGit(false)
+      if (manual) {
+        setIsRefreshingGit(false)
+      }
     }
   }, [activeWorkspace])
   // Type absolute paths into the active terminal (default drag & drop mode).
@@ -990,8 +1008,24 @@ export const AppContent: React.FC = () => {
   useEffect(() => {
     refreshGitChanges()
     if (!activeWorkspace) return
-    const timer = setInterval(refreshGitChanges, 4000)
+    // Gentle 10s polling interval only when the window is in foreground
+    const timer = setInterval(() => {
+      if (document.hasFocus()) {
+        refreshGitChanges()
+      }
+    }, 10000)
     return () => clearInterval(timer)
+  }, [refreshGitChanges, activeWorkspace])
+
+  // Immediate status sync when returning to the application
+  useEffect(() => {
+    const handleFocus = () => {
+      if (activeWorkspace) {
+        refreshGitChanges()
+      }
+    }
+    window.addEventListener('focus', handleFocus)
+    return () => window.removeEventListener('focus', handleFocus)
   }, [refreshGitChanges, activeWorkspace])
 
   // Select Workspace Folder (Orca System)
@@ -1473,9 +1507,15 @@ export const AppContent: React.FC = () => {
 
   const handleRightReset = useCallback(() => {
     if (hasActiveRightPanel) {
-      setRightPanelWidth(320)
+      setRightPanelWidth(380)
+      try {
+        localStorage.setItem(RIGHT_PANEL_WIDTH_STORAGE_KEY, '380')
+      } catch {}
     } else {
       setTerminalRightMargin(0)
+      try {
+        localStorage.setItem(TERMINAL_RIGHT_MARGIN_STORAGE_KEY, '0')
+      } catch {}
     }
   }, [hasActiveRightPanel])
 
@@ -1485,16 +1525,20 @@ export const AppContent: React.FC = () => {
       setIsDraggingLeft(true)
       const startX = e.clientX
       const startWidth = sidebarWidth
+      let latestWidth = startWidth
 
       const handleMouseMove = (moveEvent: MouseEvent) => {
         const delta = moveEvent.clientX - startX
         const maxAllowed = Math.min(600, Math.floor(window.innerWidth * 0.5))
-        const newWidth = Math.max(160, Math.min(maxAllowed, startWidth + delta))
-        setSidebarWidth(newWidth)
+        latestWidth = Math.max(160, Math.min(maxAllowed, startWidth + delta))
+        setSidebarWidth(latestWidth)
       }
 
       const handleMouseUp = () => {
         setIsDraggingLeft(false)
+        try {
+          localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, latestWidth.toString())
+        } catch {}
         window.removeEventListener('mousemove', handleMouseMove)
         window.removeEventListener('mouseup', handleMouseUp)
       }
@@ -1513,15 +1557,19 @@ export const AppContent: React.FC = () => {
 
       if (hasActiveRightPanel) {
         const startWidth = rightPanelWidth
+        let latestWidth = startWidth
         const handleMouseMove = (moveEvent: MouseEvent) => {
           const delta = startX - moveEvent.clientX
           const maxAllowed = Math.min(800, Math.floor(window.innerWidth * 0.6))
-          const newWidth = Math.max(200, Math.min(maxAllowed, startWidth + delta))
-          setRightPanelWidth(newWidth)
+          latestWidth = Math.max(200, Math.min(maxAllowed, startWidth + delta))
+          setRightPanelWidth(latestWidth)
         }
 
         const handleMouseUp = () => {
           setIsDraggingRight(false)
+          try {
+            localStorage.setItem(RIGHT_PANEL_WIDTH_STORAGE_KEY, latestWidth.toString())
+          } catch {}
           window.removeEventListener('mousemove', handleMouseMove)
           window.removeEventListener('mouseup', handleMouseUp)
         }
@@ -1530,15 +1578,19 @@ export const AppContent: React.FC = () => {
         window.addEventListener('mouseup', handleMouseUp)
       } else {
         const startMargin = terminalRightMargin
+        let latestMargin = startMargin
         const handleMouseMove = (moveEvent: MouseEvent) => {
           const delta = startX - moveEvent.clientX
           const maxAllowed = Math.min(800, Math.floor(window.innerWidth * 0.5))
-          const newMargin = Math.max(0, Math.min(maxAllowed, startMargin + delta))
-          setTerminalRightMargin(newMargin)
+          latestMargin = Math.max(0, Math.min(maxAllowed, startMargin + delta))
+          setTerminalRightMargin(latestMargin)
         }
 
         const handleMouseUp = () => {
           setIsDraggingRight(false)
+          try {
+            localStorage.setItem(TERMINAL_RIGHT_MARGIN_STORAGE_KEY, latestMargin.toString())
+          } catch {}
           window.removeEventListener('mousemove', handleMouseMove)
           window.removeEventListener('mouseup', handleMouseUp)
         }
@@ -1770,7 +1822,7 @@ export const AppContent: React.FC = () => {
           <GitChangesPanel
             gitChanges={gitChanges}
             isRefreshing={isRefreshingGit}
-            onRefresh={refreshGitChanges}
+            onRefresh={() => refreshGitChanges(true)}
             onOpenDiff={handleOpenDiff}
             onOpenFileAsTerminal={handleOpenFile}
             onClose={() => setIsGitPanelOpen(false)}

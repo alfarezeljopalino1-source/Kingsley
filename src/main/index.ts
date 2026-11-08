@@ -8,7 +8,8 @@ import { setupIpcHandlers } from './ipc-handlers'
 // Hardware acceleration & GPU rasterization optimizations for low-latency terminal rendering
 app.commandLine.appendSwitch('enable-gpu-rasterization')
 app.commandLine.appendSwitch('enable-zero-copy')
-
+app.commandLine.appendSwitch('ignore-gpu-blocklist')
+app.commandLine.appendSwitch('enable-native-gpu-memory-buffers')
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 process.env.APP_ROOT = path.join(__dirname, '../..')
 

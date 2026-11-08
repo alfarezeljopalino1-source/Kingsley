@@ -39,9 +39,14 @@ export const ScratchNotesPanel: React.FC<ScratchNotesPanelProps> = ({ onClose, w
   const [lastSaved, setLastSaved] = useState<string>('Tersimpan di disk')
 
   useEffect(() => {
-    localStorage.setItem(SCRATCH_STORAGE_KEY, noteContent)
-    const t = new Date().toLocaleTimeString()
-    setLastSaved(language === 'id' ? `Tersimpan ${t}` : `Saved at ${t}`)
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem(SCRATCH_STORAGE_KEY, noteContent)
+      } catch {}
+      const t = new Date().toLocaleTimeString()
+      setLastSaved(language === 'id' ? `Tersimpan ${t}` : `Saved at ${t}`)
+    }, 400)
+    return () => clearTimeout(timer)
   }, [noteContent, language])
 
   const handleCopy = async () => {

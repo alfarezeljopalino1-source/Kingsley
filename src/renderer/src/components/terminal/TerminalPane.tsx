@@ -108,19 +108,30 @@ const TerminalPaneComponent: React.FC<TerminalPaneProps> = ({
 
     term.open(containerRef.current)
 
-    // Hardware-accelerated WebGL renderer for ultra-low typing latency (<2ms)
-    try {
-      const webglAddon = new WebglAddon()
-      webglAddon.onContextLoss(() => {
-        webglAddon.dispose()
-        webglAddonRef.current = null
-      })
-      term.loadAddon(webglAddon)
-      webglAddonRef.current = webglAddon
-    } catch (e) {
-      console.warn('[TerminalPane] WebGL addon failed to activate, fallback to default renderer:', e)
+    // Hardware-accelerated WebGL renderer with automatic context recovery
+    const initWebgl = () => {
+      if (webglAddonRef.current || isUnmountingRef.current) return
+      try {
+        const webglAddon = new WebglAddon()
+        webglAddon.onContextLoss(() => {
+          try {
+            webglAddon.dispose()
+          } catch {}
+          webglAddonRef.current = null
+          // Automatically restore WebGL when GPU or display recovers
+          setTimeout(() => {
+            if (!isUnmountingRef.current && termRef.current) {
+              initWebgl()
+            }
+          }, 1000)
+        })
+        term.loadAddon(webglAddon)
+        webglAddonRef.current = webglAddon
+      } catch (e) {
+        console.warn('[TerminalPane] WebGL addon failed to activate, fallback to default renderer:', e)
+      }
     }
-
+    initWebgl()
     termRef.current = term
     fitAddonRef.current = fitAddon
 
@@ -187,16 +198,24 @@ const TerminalPaneComponent: React.FC<TerminalPaneProps> = ({
       }
     })
 
-    // Auto-fit on pane resize
+    // Auto-fit on pane resize with requestAnimationFrame throttling
+    let resizeRafId: number | null = null
     const resizeObserver = new ResizeObserver(() => {
-      try {
-        if (containerRef.current && containerRef.current.clientWidth > 0 && containerRef.current.clientHeight > 0) {
-          fitAddon.fit()
-          window.ferminAPI?.resizeTerminal(paneId, term.cols, term.rows)
+      if (resizeRafId !== null) cancelAnimationFrame(resizeRafId)
+      resizeRafId = requestAnimationFrame(() => {
+        try {
+          if (
+            containerRef.current &&
+            containerRef.current.clientWidth > 0 &&
+            containerRef.current.clientHeight > 0
+          ) {
+            fitAddon.fit()
+            window.ferminAPI?.resizeTerminal(paneId, term.cols, term.rows)
+          }
+        } catch (err) {
+          console.warn('[TerminalPane] Resize error:', err)
         }
-      } catch (err) {
-        console.warn('[TerminalPane] Resize error:', err)
-      }
+      })
     })
 
     resizeObserver.observe(containerRef.current)
@@ -205,6 +224,7 @@ const TerminalPaneComponent: React.FC<TerminalPaneProps> = ({
     return () => {
       isUnmountingRef.current = true
       cancelAnimationFrame(rafId)
+      if (resizeRafId !== null) cancelAnimationFrame(resizeRafId)
       resizeObserver.disconnect()
       onDataDispose.dispose()
       removeDataListener?.()

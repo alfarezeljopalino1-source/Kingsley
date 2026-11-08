@@ -1,6 +1,6 @@
 {
   "name": "kingsley",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Next-generation bespoke terminal multiplexer and agentic workstation for Windows 11",
   "type": "module",
   "main": "dist-electron/main/index.js",

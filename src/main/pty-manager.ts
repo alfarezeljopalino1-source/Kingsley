@@ -214,21 +214,27 @@ export class PtyManager {
       ptyProcess.onData((data: string) => {
         const current = this.terminals.get(id)
         if (current && current.ptyProcess === ptyProcess) {
+          // 1. Immediately forward data to frontend for zero-latency keystroke echo
+          this.onDataCallback?.(id, data)
+
+          // 2. Append history buffer
           current.history += data
           if (current.history.length > 500000) {
             current.history = current.history.slice(-400000)
           }
 
+          // 3. Agent detection: only probe on meaningful chunks (agent banner outputs),
+          // skipping tiny single-character keystroke echoes to eliminate typing stutter
           if (current.agentHint === 'none') {
-            const hint = detectAgentFromOutput(`${current.probe}${data}`)
             current.probe = (current.probe + data).slice(-2000)
-            if (hint !== 'none') {
-              current.agentHint = hint
-              current.probe = ''
+            if (data.length > 4 || current.probe.length > 100) {
+              const hint = detectAgentFromOutput(current.probe)
+              if (hint !== 'none') {
+                current.agentHint = hint
+                current.probe = ''
+              }
             }
           }
-
-          this.onDataCallback?.(id, data)
         }
       })
 

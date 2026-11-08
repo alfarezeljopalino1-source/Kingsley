@@ -5,6 +5,10 @@ import { fileURLToPath } from 'node:url'
 import { PtyManager } from './pty-manager'
 import { setupIpcHandlers } from './ipc-handlers'
 
+// Hardware acceleration & GPU rasterization optimizations for low-latency terminal rendering
+app.commandLine.appendSwitch('enable-gpu-rasterization')
+app.commandLine.appendSwitch('enable-zero-copy')
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 process.env.APP_ROOT = path.join(__dirname, '../..')
 
@@ -67,10 +71,11 @@ function createWindow(): void {
     },
   })
 
-  // Log renderer console messages and load failures to terminal and debug.log
+  // Log renderer console messages: only write errors (level >= 3) to disk to prevent synchronous I/O blocking
   mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
-    log(`RENDERER CONSOLE [lvl ${level}] ${message} (${sourceId}:${line})`)
-    console.log(`[Renderer Console level ${level}]: ${message} (${sourceId}:${line})`)
+    if (level >= 3) {
+      log(`RENDERER ERROR [lvl ${level}] ${message} (${sourceId}:${line})`)
+    }
   })
   mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
     log(`FAIL LOAD ${validatedURL}: ${errorDescription} (${errorCode})`)

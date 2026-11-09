@@ -5,8 +5,6 @@ import {
   X,
   Terminal as TerminalIcon,
   Circle,
-  Camera,
-  Loader2
 } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 import type { ShellType } from '@shared/types'
@@ -20,8 +18,6 @@ interface PaneHeaderProps {
   onSplit: (direction: 'horizontal' | 'vertical') => void
   onClose: () => void
   onChangeShell: (shell: ShellType) => void
-  onCaptureScreenshot?: () => void
-  isCapturing?: boolean
 }
 
 export const PaneHeader: React.FC<PaneHeaderProps> = ({
@@ -32,8 +28,6 @@ export const PaneHeader: React.FC<PaneHeaderProps> = ({
   onSplit,
   onClose,
   onChangeShell,
-  onCaptureScreenshot,
-  isCapturing,
 }) => {
   const { theme, themeId } = useTheme()
 
@@ -99,20 +93,6 @@ export const PaneHeader: React.FC<PaneHeaderProps> = ({
 
       {/* Right: Split & Close Actions */}
       <div className="flex items-center gap-1 shrink-0">
-        {onCaptureScreenshot && (
-          <button
-            onClick={onCaptureScreenshot}
-            disabled={isCapturing}
-            className="p-1 rounded hover:bg-white/10 opacity-70 hover:opacity-100 transition-opacity disabled:opacity-40"
-            title="Kirim Screenshot ke Terminal (Ctrl+Shift+S)"
-          >
-            {isCapturing ? (
-              <Loader2 className="w-3 h-3 text-emerald-400 animate-spin" />
-            ) : (
-              <Camera className="w-3 h-3 text-emerald-400" />
-            )}
-          </button>
-        )}
 
         <button
           onClick={() => onSplit('vertical')}

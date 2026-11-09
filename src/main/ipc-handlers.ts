@@ -4,8 +4,6 @@ import {
   shell,
   app,
   clipboard,
-  desktopCapturer,
-  screen,
   type BrowserWindow,
 } from 'electron'
 import fs from 'node:fs'
@@ -125,117 +123,6 @@ async function copyOrMoveItem(
   }
 
   return { src: resolvedSrc, dest: destPath }
-}
-
-// ---------------------------------------------------------------------------
-// Screenshot helpers
-// ---------------------------------------------------------------------------
-
-let lastScreenshotDir: string | null = null
-
-/**
- * Keeps the attachment folder out of `git status` without touching the
- * project's tracked .gitignore (uses the local-only exclude file).
- */
-function ensureLocalGitExclude(workspacePath: string): void {
-  try {
-    const gitDir = path.join(workspacePath, '.git')
-    if (!fs.existsSync(gitDir)) return
-    const infoDir = path.join(gitDir, 'info')
-    fs.mkdirSync(infoDir, { recursive: true })
-    const excludeFile = path.join(infoDir, 'exclude')
-    const current = fs.existsSync(excludeFile) ? fs.readFileSync(excludeFile, 'utf8') : ''
-    if (!/^\s*\.kingsley\/?\s*$/m.test(current)) {
-      const prefix = current && !current.endsWith('\n') ? '\n' : ''
-      fs.appendFileSync(excludeFile, `${prefix}.kingsley/\n`, 'utf8')
-    }
-  } catch {
-    // purely cosmetic, never block a screenshot
-  }
-}
-
-/**
- * Screenshots land inside the workspace (so Gemini CLI's workspace boundary
- * accepts the @ reference), with Pictures as the fallback when no project is
- * open.
- */
-function getScreenshotDir(workspacePath?: string): string {
-  let candidate = ''
-  try {
-    candidate = workspacePath ? path.resolve(workspacePath) : ''
-    if (candidate && fs.statSync(candidate).isDirectory()) {
-      const dir = path.join(candidate, '.kingsley', 'screenshots')
-      fs.mkdirSync(dir, { recursive: true })
-      ensureLocalGitExclude(candidate)
-      lastScreenshotDir = dir
-      return dir
-    }
-  } catch {
-    // fall through to Pictures
-  }
-
-  const dir = path.join(app.getPath('pictures'), 'KingsleyScreenshots')
-  fs.mkdirSync(dir, { recursive: true })
-  lastScreenshotDir = dir
-  return dir
-}
-
-function buildScreenshotPath(ext = 'png', workspacePath?: string): string {
-  const now = new Date()
-  const pad = (n: number) => String(n).padStart(2, '0')
-  const stamp = [
-    now.getFullYear(),
-    '-',
-    pad(now.getMonth() + 1),
-    '-',
-    pad(now.getDate()),
-    '_',
-    pad(now.getHours()),
-    '-',
-    pad(now.getMinutes()),
-    '-',
-    pad(now.getSeconds()),
-    '-',
-    pad(now.getMilliseconds()),
-  ].join('')
-  return path.join(getScreenshotDir(workspacePath), `screenshot-${stamp}.${ext}`)
-}
-
-async function capturePrimaryDisplayPng(): Promise<Buffer> {
-  const primary = screen.getPrimaryDisplay()
-  const scale = primary.scaleFactor || 1
-  const sources = await desktopCapturer.getSources({
-    types: ['screen'],
-    thumbnailSize: {
-      width: Math.max(1, Math.round(primary.size.width * scale)),
-      height: Math.max(1, Math.round(primary.size.height * scale)),
-    },
-    fetchWindowIcons: false,
-  })
-
-  const source =
-    sources.find((item) => String(item.display_id) === String(primary.id)) || sources[0]
-
-  if (!source) {
-    throw new Error('No screen capture source available')
-  }
-
-  const image = source.thumbnail
-  if (!image || image.isEmpty()) {
-    throw new Error('Screen capture returned an empty image')
-  }
-
-  return image.toPNG()
-}
-
-async function saveScreenshotBuffer(
-  buffer: Buffer,
-  ext = 'png',
-  workspacePath?: string
-): Promise<string> {
-  const dest = buildScreenshotPath(ext, workspacePath)
-  await fs.promises.writeFile(dest, buffer)
-  return dest
 }
 
 // ---------------------------------------------------------------------------
@@ -756,61 +643,6 @@ export function setupIpcHandlers(mainWindow: BrowserWindow, ptyManager: PtyManag
   })
 
 
-
-  // -------------------------------------------------------------------------
-  // Screenshot capture (full primary display + clipboard image)
-  // -------------------------------------------------------------------------
-  ipcMain.handle('screenshot:capture', async (_event, workspacePath?: string) => {
-    try {
-      const png = await capturePrimaryDisplayPng()
-      const savedPath = await saveScreenshotBuffer(png, 'png', workspacePath)
-      return { success: true, path: savedPath }
-    } catch (err: unknown) {
-      return { success: false, error: err instanceof Error ? err.message : String(err) }
-    }
-  })
-
-  ipcMain.handle('screenshot:fromClipboard', async (_event, workspacePath?: string) => {
-    try {
-      const image = clipboard.readImage()
-      if (!image || image.isEmpty()) {
-        return { success: false, error: 'Clipboard tidak berisi gambar.' }
-      }
-      const savedPath = await saveScreenshotBuffer(image.toPNG(), 'png', workspacePath)
-      return { success: true, path: savedPath }
-    } catch (err: unknown) {
-      return { success: false, error: err instanceof Error ? err.message : String(err) }
-    }
-  })
-
-  ipcMain.handle('screenshot:saveDataUrl', async (_event, dataUrl: string, workspacePath?: string) => {
-    try {
-      const match = /^data:image\/([a-zA-Z0-9+.-]+);base64,([\s\S]+)$/.exec(dataUrl || '')
-      if (!match) {
-        return { success: false, error: 'Format gambar tidak valid.' }
-      }
-      const rawExt = match[1].toLowerCase()
-      const ext = rawExt === 'jpeg' ? 'jpg' : rawExt === 'svg+xml' ? 'svg' : rawExt
-      const savedPath = await saveScreenshotBuffer(
-        Buffer.from(match[2], 'base64'),
-        ext,
-        workspacePath
-      )
-      return { success: true, path: savedPath }
-    } catch (err: unknown) {
-      return { success: false, error: err instanceof Error ? err.message : String(err) }
-    }
-  })
-
-  ipcMain.handle('screenshot:openFolder', async () => {
-    try {
-      const dir = lastScreenshotDir || getScreenshotDir()
-      const err = await shell.openPath(dir)
-      return { success: !err, error: err || undefined }
-    } catch (err: unknown) {
-      return { success: false, error: err instanceof Error ? err.message : String(err) }
-    }
-  })
 
   ipcMain.handle('app:relaunch', async () => {
     try {

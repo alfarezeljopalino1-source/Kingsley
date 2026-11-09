@@ -44,39 +44,7 @@ const TerminalPaneComponent: React.FC<TerminalPaneProps> = ({
   const isInitialMountRef = useRef(true)
   const [isExited, setIsExited] = useState(false)
   const [exitCode, setExitCode] = useState<number | null>(null)
-  const [isCapturing, setIsCapturing] = useState(false)
 
-  // Capture the primary display, save it as PNG and type the path into this
-  // shell so CLI agents (Claude Code, OpenCode, etc.) can read it.
-  const handleCaptureScreenshot = async () => {
-    const api = window.ferminAPI
-    if (!api?.captureScreenshot || isCapturing) return
-
-    setIsCapturing(true)
-    try {
-      const result = await api.captureScreenshot(cwd)
-      if (!result?.success || !result.path) {
-        showFileToast(
-          'Screenshot Gagal',
-          result?.error || 'Tidak dapat mengambil screenshot.',
-          'error'
-        )
-        return
-      }
-
-      const formatted = await formatPathForPane(result.path, {
-        paneId,
-        shell,
-        workspacePath: cwd,
-      })
-
-      api.sendInput(paneId, `${formatted} `)
-      showFileToast('Screenshot Terkirim', formatted, 'success')
-      termRef.current?.focus()
-    } finally {
-      setIsCapturing(false)
-    }
-  }
 
   // Initialize xterm instance
   useEffect(() => {
@@ -134,22 +102,6 @@ const TerminalPaneComponent: React.FC<TerminalPaneProps> = ({
           if (text) {
             window.ferminAPI?.sendInput(paneId, text)
             return
-          }
-          // Fallback: clipboard image / screenshot
-          if (window.ferminAPI?.captureClipboardImage) {
-            try {
-              const res = await window.ferminAPI.captureClipboardImage(cwd)
-              if (res?.success && res.path) {
-                const formatted = await formatPathForPane(res.path, {
-                  paneId,
-                  shell,
-                  workspacePath: cwd,
-                })
-                window.ferminAPI.sendInput(paneId, `${formatted} `)
-                showFileToast('Screenshot Ditempel', formatted, 'success')
-                return
-              }
-            } catch {}
           }
           // Fallback: files copied from Windows Explorer
           if (window.ferminAPI?.getClipboardFiles) {
@@ -411,8 +363,6 @@ const TerminalPaneComponent: React.FC<TerminalPaneProps> = ({
         onSplit={onSplit}
         onClose={onClose}
         onChangeShell={onChangeShell}
-        onCaptureScreenshot={handleCaptureScreenshot}
-        isCapturing={isCapturing}
       />
 
       {/* Terminal Canvas Container */}

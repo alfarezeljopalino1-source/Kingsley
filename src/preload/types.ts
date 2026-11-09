@@ -36,11 +36,6 @@ export interface CopyOrMoveResult {
 
 export type WindowAction = 'minimize' | 'maximize' | 'close'
 
-export interface ScreenshotResult {
-  success: boolean
-  path?: string
-  error?: string
-}
 
 export interface FerminAPI {
   // Terminal Lifecycle & I/O
@@ -96,11 +91,6 @@ export interface FerminAPI {
   showItemInFolder: (targetPath: string) => Promise<{ success: boolean; error?: string }>
   isDir: (targetPath: string) => Promise<{ success: boolean; isDirectory: boolean; name: string }>
 
-  // Screenshot Capture
-  captureScreenshot: (workspacePath?: string) => Promise<ScreenshotResult>
-  captureClipboardImage: (workspacePath?: string) => Promise<ScreenshotResult>
-  saveScreenshotDataUrl: (dataUrl: string, workspacePath?: string) => Promise<ScreenshotResult>
-  openScreenshotFolder: () => Promise<{ success: boolean; error?: string }>
 }
 
 declare global {

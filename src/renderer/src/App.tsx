@@ -111,15 +111,6 @@ function updateNodeRatio(
   return root
 }
 
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '')
-    reader.onerror = () => reject(reader.error)
-    reader.readAsDataURL(file)
-  })
-}
-
 function getAgentStartupCommand(agent: string, wsName: string): string {  switch (agent) {
     case 'claude':
       return "if (Get-Command claude -ErrorAction SilentlyContinue) { claude } else { Write-Host \"`n✨ Claude Code: run 'npm install -g @anthropic-ai/claude-code' to install.`n\" -ForegroundColor Yellow }\r"
@@ -501,52 +492,6 @@ export const AppContent: React.FC = () => {
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0]
   const activePane =
     (activeTab?.activePaneId && panes.get(activeTab.activePaneId)) || panes.values().next().value
-
-  // Capture a screenshot / clipboard image, save it as PNG and send the path
-  // to the active terminal so CLI agents can open it.
-  const sendScreenshotToTerminal = useCallback(
-    async (source: 'screen' | 'clipboard' = 'screen') => {
-      const pane = activePane
-      const api = window.ferminAPI
-      if (!pane?.id || !api) {
-        showFileToast(
-          'Tidak Ada Terminal Aktif',
-          'Buka terminal dulu sebelum mengirim screenshot.',
-          'info'
-        )
-        return
-      }
-
-      const result =
-        source === 'clipboard'
-          ? await api.captureClipboardImage?.(activeWorkspace?.path)
-          : await api.captureScreenshot?.(activeWorkspace?.path)
-
-      if (!result || !result.success || !result.path) {
-        showFileToast(
-          'Screenshot Gagal',
-          result?.error || 'Tidak dapat mengambil screenshot.',
-          'error'
-        )
-        return
-      }
-
-      const formatted = await formatPathForPane(result.path, {
-        paneId: pane.id,
-        shell: pane.shell,
-        workspaceAgent: activeWorkspace?.agent,
-        workspacePath: activeWorkspace?.path,
-      })
-      api.sendInput(pane.id, `${formatted} `)
-      showFileToast(
-        source === 'clipboard' ? 'Screenshot Ditempel' : 'Screenshot Terkirim',
-        formatted,
-        'success'
-      )
-    },
-    [activePane, activeWorkspace]
-  )
-
   // Add new Tab
   // Add new Tab (named after active project from Image 3, never generic Workspace)
   const handleAddTab = useCallback((customTitle?: unknown) => {
@@ -858,50 +803,6 @@ export const AppContent: React.FC = () => {
       if (isEditable) return
 
       const clipboardFiles = Array.from(e.clipboardData?.files || [])
-      const imageFile = clipboardFiles.find((file) => file.type.startsWith('image/'))
-
-      // 1. Pasted screenshot / image
-      if (imageFile) {
-        e.preventDefault()
-        e.stopPropagation()
-        const pane = activePane
-        const api = window.ferminAPI
-        if (!pane?.id || !api) {
-          showFileToast(
-            'Tidak Ada Terminal Aktif',
-            'Buka terminal dulu sebelum mengirim screenshot.',
-            'info'
-          )
-          return
-        }
-
-        try {
-          const dataUrl = await readFileAsDataUrl(imageFile)
-          const saved = dataUrl
-            ? await api.saveScreenshotDataUrl?.(dataUrl, activeWorkspace?.path)
-            : await api.captureClipboardImage?.(activeWorkspace?.path)
-
-          if (saved?.success && saved.path) {
-            const formatted = await formatPathForPane(saved.path, {
-              paneId: pane.id,
-              shell: pane.shell,
-              workspaceAgent: activeWorkspace?.agent,
-              workspacePath: activeWorkspace?.path,
-            })
-            api.sendInput(pane.id, `${formatted} `)
-            showFileToast('Screenshot Ditempel', formatted, 'success')
-          } else {
-            showFileToast(
-              'Screenshot Gagal',
-              saved?.error || 'Gambar dari clipboard tidak dapat disimpan.',
-              'error'
-            )
-          }
-        } catch {
-          showFileToast('Screenshot Gagal', 'Gambar dari clipboard tidak dapat dibaca.', 'error')
-        }
-        return
-      }
 
       // 2. Files pasted while a terminal is focused -> type their paths into
       //    the shell prompt instead of copying anything.
@@ -1652,9 +1553,6 @@ export const AppContent: React.FC = () => {
         if (activeTab?.activePaneId) {
           handleClosePane(activeTab.activePaneId)
         }
-      } else if (isCtrl && e.shiftKey && e.key.toUpperCase() === 'S') {
-        e.preventDefault()
-        void sendScreenshotToTerminal('screen')
       } else if (isCtrl && e.shiftKey && e.key.toUpperCase() === 'G') {
         e.preventDefault()
         setIsGitPanelOpen((prev) => !prev)
@@ -1686,7 +1584,6 @@ export const AppContent: React.FC = () => {
     isDiffOpen,
     isPaletteOpen,
     isSettingsOpen,
-    sendScreenshotToTerminal,
   ])
 
   const totalActivePanes = activeTab?.rootNode ? collectPaneIds(activeTab.rootNode).length : 0
@@ -1934,7 +1831,6 @@ export const AppContent: React.FC = () => {
         isGraphifyOpen={isGraphifyOpen}
         onToggleGraphify={() => setIsGraphifyOpen((prev) => !prev)}
         onOpenMcpSkills={() => setIsMcpModalOpen(true)}
-        onCaptureScreenshot={() => void sendScreenshotToTerminal('screen')}
       />
 
       {/* MCP & Skills Inspector Modal */}
@@ -1968,7 +1864,6 @@ export const AppContent: React.FC = () => {
         onToggleGitPanel={() => setIsGitPanelOpen((prev) => !prev)}
         onOpenSettings={() => handleOpenSettings('account')}
         onReplayIntro={() => setShowIntro(true)}
-        onCaptureScreenshot={() => void sendScreenshotToTerminal('screen')}
       />
 
       {/* 5. Settings & Theme Modal (Ctrl+,) */}

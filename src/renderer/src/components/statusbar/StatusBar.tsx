@@ -1,5 +1,5 @@
 import React from 'react'
-import { GitBranch, Command, Terminal, Sparkles, Layout, Globe, Rocket, ListTodo, FileText, Share2, Server, Camera } from 'lucide-react'
+import { GitBranch, Command, Terminal, Sparkles, Layout, Globe, Rocket, ListTodo, FileText, Share2, Server } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 import { useFeatures } from '../../context/FeaturesContext'
 import type { ShellType } from '@shared/types'
@@ -26,7 +26,6 @@ interface StatusBarProps {
   isGraphifyOpen?: boolean
   onToggleGraphify?: () => void
   onOpenMcpSkills?: () => void
-  onCaptureScreenshot?: () => void
 }
 
 export const StatusBar: React.FC<StatusBarProps> = ({
@@ -51,7 +50,6 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   isGraphifyOpen,
   onToggleGraphify,
   onOpenMcpSkills,
-  onCaptureScreenshot,
 }) => {
   const { theme } = useTheme()
   const { features } = useFeatures()
@@ -215,19 +213,6 @@ export const StatusBar: React.FC<StatusBarProps> = ({
 
         <div className="h-3 w-[1px] bg-white/10" />
 
-        {onCaptureScreenshot && (
-          <>
-            <button
-              onClick={onCaptureScreenshot}
-              className="flex items-center gap-1.5 hover:text-emerald-300 text-emerald-400 transition-colors cursor-pointer"
-              title="Kirim Screenshot ke Terminal Aktif (Ctrl+Shift+S)"
-            >
-              <Camera className="w-3 h-3" />
-              <span>Screenshot</span>
-            </button>
-            <div className="h-3 w-[1px] bg-white/10" />
-          </>
-        )}
 
         <button
           onClick={

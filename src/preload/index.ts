@@ -180,22 +180,6 @@ const ferminAPI: FerminAPI = {
   isDir: (targetPath: string) => {
     return ipcRenderer.invoke('fs:isDir', targetPath)
   },
-
-  captureScreenshot: (workspacePath?: string) => {
-    return ipcRenderer.invoke('screenshot:capture', workspacePath)
-  },
-
-  captureClipboardImage: (workspacePath?: string) => {
-    return ipcRenderer.invoke('screenshot:fromClipboard', workspacePath)
-  },
-
-  saveScreenshotDataUrl: (dataUrl: string, workspacePath?: string) => {
-    return ipcRenderer.invoke('screenshot:saveDataUrl', dataUrl, workspacePath)
-  },
-
-  openScreenshotFolder: () => {
-    return ipcRenderer.invoke('screenshot:openFolder')
-  },
 }
 
 contextBridge.exposeInMainWorld('ferminAPI', ferminAPI)

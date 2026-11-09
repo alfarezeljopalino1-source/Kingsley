@@ -10,7 +10,6 @@ import {
   Sparkles,
   Maximize2,
   GitCompare,
-  Camera
 } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 import { THEMES, type ThemeId } from '../../types/theme'
@@ -37,7 +36,6 @@ interface CommandPaletteProps {
   onToggleGitPanel?: () => void
   onOpenSettings: () => void
   onReplayIntro?: () => void
-  onCaptureScreenshot?: () => void
 }
 
 export const CommandPalette: React.FC<CommandPaletteProps> = ({
@@ -51,7 +49,6 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   onToggleGitPanel,
   onOpenSettings,
   onReplayIntro,
-  onCaptureScreenshot,
 }) => {
   const { theme, setThemeId } = useTheme()
   const [query, setQuery] = useState('')
@@ -126,15 +123,6 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           },
         ]
       : []),
-    {
-      id: 'grab-screenshot',
-      title: 'Capture Screenshot & Send to Terminal',
-      subtitle: 'Saves the screen as PNG and types its path into the active shell',
-      category: 'Action',
-      icon: <Camera className="w-4 h-4 text-emerald-400" />,
-      action: () => onCaptureScreenshot?.(),
-      shortcut: 'Ctrl+Shift+S',
-    },
     {
       id: 'spawn-pwsh',
       title: 'Launch PowerShell Session',

@@ -5,11 +5,9 @@ import { fileURLToPath } from 'node:url'
 import { PtyManager } from './pty-manager'
 import { setupIpcHandlers } from './ipc-handlers'
 
-// Hardware acceleration & high-performance GPU rasterization for zero-latency terminal rendering
+// Hardware acceleration: standard GPU rasterization without forcing discrete GPU wake-up
+// (Prevents 2-3s full laptop freezes on dual-GPU Optimus laptops with Intel UHD + RTX 3050)
 app.commandLine.appendSwitch('enable-gpu-rasterization')
-app.commandLine.appendSwitch('ignore-gpu-blocklist')
-app.commandLine.appendSwitch('disable-software-rasterizer')
-app.commandLine.appendSwitch('force-gpu-mem-available-mb', '2048')
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 process.env.APP_ROOT = path.join(__dirname, '../..')
 

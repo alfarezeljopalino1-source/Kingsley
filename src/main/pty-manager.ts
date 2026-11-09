@@ -328,14 +328,21 @@ export class PtyManager {
     this.terminals.clear()
   }
 
+  private executableCache = new Map<string, string | null>()
+
   private findExecutable(exeName: string): string | null {
+    if (this.executableCache.has(exeName)) {
+      return this.executableCache.get(exeName) ?? null
+    }
     const paths = (process.env.PATH || '').split(path.delimiter)
     for (const p of paths) {
       const fullPath = path.join(p, exeName)
       if (fs.existsSync(fullPath)) {
+        this.executableCache.set(exeName, fullPath)
         return fullPath
       }
     }
+    this.executableCache.set(exeName, null)
     return null
   }
 }

@@ -421,22 +421,6 @@ export const GitChangesPanel: React.FC<GitChangesPanelProps> = ({
     return () => window.removeEventListener('ferminterm:refresh-explorer', handler)
   }, [loadRootItems])
 
-  // Close context menu on outside click or Esc
-  useEffect(() => {
-    const handleClick = () => setContextMenu(null)
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setContextMenu(null)
-        setDialogState(null)
-      }
-    }
-    window.addEventListener('click', handleClick)
-    window.addEventListener('keydown', handleKeyDown)
-    return () => {
-      window.removeEventListener('click', handleClick)
-      window.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [])
 
   // Paste handler: pastes files/folders into a target directory
   const handlePasteInto = useCallback(
@@ -488,6 +472,68 @@ export const GitChangesPanel: React.FC<GitChangesPanelProps> = ({
     },
     [internalClipboard, onRefresh]
   )
+  // Close context menu on outside click or Esc
+  // Close context menu on outside click or Esc / handle explorer shortcuts
+  useEffect(() => {
+    const handleWindowKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setContextMenu(null)
+        setDialogState(null)
+        return
+      }
+
+      // Check if target is an editable input or xterm
+      const target = e.target as HTMLElement | null
+      if (
+        target?.tagName === 'INPUT' ||
+        target?.tagName === 'TEXTAREA' ||
+        target?.closest('.xterm')
+      ) {
+        return
+      }
+
+      // Only handle if panel has focus or selectedItem is active
+      const panel = document.querySelector('[data-git-panel="true"]')
+      if (!panel?.contains(document.activeElement) && !selectedItem) return
+
+      const isCtrl = e.ctrlKey || e.metaKey
+      const targetDir = selectedItem
+        ? selectedItem.isDirectory
+          ? selectedItem.path
+          : workspacePath || '.'
+        : workspacePath || '.'
+
+      if (isCtrl && e.key.toLowerCase() === 'c' && selectedItem) {
+        e.preventDefault()
+        setInternalClipboard({
+          paths: [selectedItem.path],
+          operation: 'copy',
+          sourceDir: selectedItem.path,
+        })
+        window.ferminAPI?.writeClipboardFiles?.([selectedItem.path])
+        showFileToast('Disalin ke Clipboard', selectedItem.name, 'copy')
+      } else if (isCtrl && e.key.toLowerCase() === 'x' && selectedItem) {
+        e.preventDefault()
+        setInternalClipboard({
+          paths: [selectedItem.path],
+          operation: 'move',
+          sourceDir: selectedItem.path,
+        })
+        showFileToast('Dipotong (Cut)', `${selectedItem.name} — tekan Ctrl+V di folder tujuan`, 'move')
+      } else if (isCtrl && e.key.toLowerCase() === 'v') {
+        e.preventDefault()
+        void handlePasteInto(targetDir)
+      }
+    }
+
+    const closeContext = () => setContextMenu(null)
+    window.addEventListener('click', closeContext)
+    window.addEventListener('keydown', handleWindowKeyDown)
+    return () => {
+      window.removeEventListener('click', closeContext)
+      window.removeEventListener('keydown', handleWindowKeyDown)
+    }
+  }, [selectedItem, workspacePath, handlePasteInto])
 
   // Drag & drop directly on a folder in the tree
   const handleDropOnFolder = useCallback(

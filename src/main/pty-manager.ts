@@ -14,6 +14,8 @@ interface ActivePty {
   agentHint: string
   /** Rolling tail used to detect agent banners split across chunks. */
   probe: string
+  /** Timestamp of last agent probe to prevent running regex on every chunk */
+  lastAgentCheck: number
 }
 
 /**
@@ -217,17 +219,22 @@ export class PtyManager {
           // 1. Immediately forward data to frontend for zero-latency keystroke echo
           this.onDataCallback?.(id, data)
 
-          // 2. Append history buffer
+          // 2. Append history buffer with hysteresis: trim down to 300k only after 600k
+          // to completely eliminate huge string allocations and GC pauses on every chunk.
           current.history += data
-          if (current.history.length > 500000) {
-            current.history = current.history.slice(-400000)
+          if (current.history.length > 600000) {
+            current.history = current.history.slice(-300000)
           }
 
-          // 3. Agent detection: only probe on meaningful chunks (agent banner outputs),
-          // skipping tiny single-character keystroke echoes to eliminate typing stutter
+          // 3. Agent detection: throttled to at most once per 500ms, only on substantial chunks
           if (current.agentHint === 'none') {
             current.probe = (current.probe + data).slice(-2000)
-            if (data.length > 4 || current.probe.length > 100) {
+            const now = Date.now()
+            if (
+              now - current.lastAgentCheck >= 500 &&
+              (data.length > 10 || current.probe.length > 100)
+            ) {
+              current.lastAgentCheck = now
               const hint = detectAgentFromOutput(current.probe)
               if (hint !== 'none') {
                 current.agentHint = hint
@@ -254,6 +261,7 @@ export class PtyManager {
         history: '',
         agentHint: 'none',
         probe: '',
+        lastAgentCheck: 0,
       })
 
       return { success: true, pid: ptyProcess.pid }

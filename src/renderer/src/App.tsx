@@ -962,7 +962,25 @@ export const AppContent: React.FC = () => {
         return
       }
 
-      if (isXterm) return
+      // 3. Plain text pasted while terminal is focused
+      if (isXterm) {
+        const text = e.clipboardData?.getData('text/plain')
+        if (text && activePane?.id && window.ferminAPI?.sendInput) {
+          e.preventDefault()
+          e.stopPropagation()
+          window.ferminAPI.sendInput(activePane.id, text)
+        }
+        return
+      }
+
+      // 4. Plain text pasted into active terminal when outside inputs
+      const plainText = e.clipboardData?.getData('text/plain')
+      if (plainText && !hasFilePayload && clipboardFiles.length === 0 && activePane?.id && window.ferminAPI?.sendInput) {
+        e.preventDefault()
+        e.stopPropagation()
+        window.ferminAPI.sendInput(activePane.id, plainText)
+        return
+      }
 
       if (!activeWorkspace?.path) return
 

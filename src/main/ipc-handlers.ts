@@ -433,7 +433,15 @@ export function setupIpcHandlers(mainWindow: BrowserWindow, ptyManager: PtyManag
   // Git Status (Orca Changes system)
   ipcMain.handle('git:getStatus', async (_event, folderPath: string) => {
     try {
-      const { stdout } = await execAsync('git status --porcelain', { cwd: folderPath, encoding: 'utf8' })
+      if (!folderPath || !fs.existsSync(path.join(folderPath, '.git'))) {
+        return { success: true, files: [] }
+      }
+      const { stdout } = await execAsync('git status --porcelain', {
+        cwd: folderPath,
+        encoding: 'utf8',
+        timeout: 5000,
+        windowsHide: true,
+      })
       const files = stdout.split('\n').filter(Boolean).map((line) => {
         const status = line.slice(0, 2).trim()
         const filePath = line.slice(3).trim()

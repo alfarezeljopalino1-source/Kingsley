@@ -94,7 +94,7 @@ const TerminalPaneComponent: React.FC<TerminalPaneProps> = ({
       cursorStyle: appearance.cursorStyle,
       cursorWidth: 2,
       theme: theme.xterm,
-      allowTransparency: true,
+      allowTransparency: false,
       macOptionIsMeta: true,
       windowsPty: { backend: 'conpty', buildNumber: 22621 },
       scrollback: 5000,
@@ -105,9 +105,86 @@ const TerminalPaneComponent: React.FC<TerminalPaneProps> = ({
 
     term.loadAddon(fitAddon)
     term.loadAddon(webLinksAddon)
-
     term.open(containerRef.current)
 
+    // Keyboard shortcuts: Ctrl+C (copy when selected, otherwise send SIGINT), Ctrl+V (paste)
+    term.attachCustomKeyEventHandler((arg: KeyboardEvent) => {
+      if (arg.type !== 'keydown') return true
+
+      const isCtrl = arg.ctrlKey || arg.metaKey
+      const isShift = arg.shiftKey
+      const key = arg.key.toLowerCase()
+
+      // 1. Copy: Ctrl+C (when text is selected) or Ctrl+Shift+C
+      if (isCtrl && (key === 'c' || arg.code === 'KeyC')) {
+        if (isShift || term.hasSelection()) {
+          const selection = term.getSelection()
+          if (selection) {
+            navigator.clipboard.writeText(selection).catch(() => {})
+            return false // Prevent sending SIGINT (\x03) to shell
+          }
+        }
+        // No selection: let Ctrl+C pass through to PTY as SIGINT (\x03)
+        return true
+      }
+
+      // 2. Paste: Ctrl+V or Ctrl+Shift+V
+      if (isCtrl && (key === 'v' || arg.code === 'KeyV')) {
+        navigator.clipboard.readText().then(async (text) => {
+          if (text) {
+            window.ferminAPI?.sendInput(paneId, text)
+            return
+          }
+          // Fallback: clipboard image / screenshot
+          if (window.ferminAPI?.captureClipboardImage) {
+            try {
+              const res = await window.ferminAPI.captureClipboardImage(cwd)
+              if (res?.success && res.path) {
+                const formatted = await formatPathForPane(res.path, {
+                  paneId,
+                  shell,
+                  workspacePath: cwd,
+                })
+                window.ferminAPI.sendInput(paneId, `${formatted} `)
+                showFileToast('Screenshot Ditempel', formatted, 'success')
+                return
+              }
+            } catch {}
+          }
+          // Fallback: files copied from Windows Explorer
+          if (window.ferminAPI?.getClipboardFiles) {
+            try {
+              const fileRes = await window.ferminAPI.getClipboardFiles()
+              if (fileRes?.success && fileRes.files?.length) {
+                const formatted = (
+                  await Promise.all(
+                    fileRes.files.map((p) =>
+                      formatPathForPane(p, {
+                        paneId,
+                        shell,
+                        workspacePath: cwd,
+                      })
+                    )
+                  )
+                ).join(' ')
+                window.ferminAPI.sendInput(paneId, `${formatted} `)
+                showFileToast(
+                  fileRes.files.length > 1
+                    ? `${fileRes.files.length} Referensi Ditempel`
+                    : 'Referensi Ditempel ke Terminal',
+                  formatted,
+                  'success'
+                )
+                return
+              }
+            } catch {}
+          }
+        }).catch(() => {})
+        return false // Consume event so \x16 is not sent to PTY
+      }
+
+      return true
+    })
     // Hardware-accelerated WebGL renderer with automatic context recovery
     const initWebgl = () => {
       if (webglAddonRef.current || isUnmountingRef.current) return
@@ -198,7 +275,9 @@ const TerminalPaneComponent: React.FC<TerminalPaneProps> = ({
       }
     })
 
-    // Auto-fit on pane resize with requestAnimationFrame throttling
+    // Auto-fit on pane resize with requestAnimationFrame throttling & duplicate dimension check
+    let prevCols = 0
+    let prevRows = 0
     let resizeRafId: number | null = null
     const resizeObserver = new ResizeObserver(() => {
       if (resizeRafId !== null) cancelAnimationFrame(resizeRafId)
@@ -210,7 +289,11 @@ const TerminalPaneComponent: React.FC<TerminalPaneProps> = ({
             containerRef.current.clientHeight > 0
           ) {
             fitAddon.fit()
-            window.ferminAPI?.resizeTerminal(paneId, term.cols, term.rows)
+            if (term.cols !== prevCols || term.rows !== prevRows) {
+              prevCols = term.cols
+              prevRows = term.rows
+              window.ferminAPI?.resizeTerminal(paneId, term.cols, term.rows)
+            }
           }
         } catch (err) {
           console.warn('[TerminalPane] Resize error:', err)
@@ -239,7 +322,7 @@ const TerminalPaneComponent: React.FC<TerminalPaneProps> = ({
       termRef.current = null
       fitAddonRef.current = null
     }
-  }, [paneId, shell, cwd])
+  }, [paneId, shell])
 
   // Dual-sync: update xterm colors, typography and cursor whenever theme or appearance changes (skip initial mount)
   useEffect(() => {
@@ -339,6 +422,21 @@ const TerminalPaneComponent: React.FC<TerminalPaneProps> = ({
         onClick={() => {
           onFocus()
           termRef.current?.focus()
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          if (termRef.current?.hasSelection()) {
+            const sel = termRef.current.getSelection()
+            if (sel) {
+              navigator.clipboard.writeText(sel).catch(() => {})
+            }
+          } else {
+            navigator.clipboard.readText().then((text) => {
+              if (text && window.ferminAPI) {
+                window.ferminAPI.sendInput(paneId, text)
+              }
+            }).catch(() => {})
+          }
         }}
       >
         <div

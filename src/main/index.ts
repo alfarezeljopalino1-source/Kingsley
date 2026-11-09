@@ -5,11 +5,11 @@ import { fileURLToPath } from 'node:url'
 import { PtyManager } from './pty-manager'
 import { setupIpcHandlers } from './ipc-handlers'
 
-// Hardware acceleration & GPU rasterization optimizations for low-latency terminal rendering
+// Hardware acceleration & high-performance GPU rasterization for zero-latency terminal rendering
 app.commandLine.appendSwitch('enable-gpu-rasterization')
-app.commandLine.appendSwitch('enable-zero-copy')
 app.commandLine.appendSwitch('ignore-gpu-blocklist')
-app.commandLine.appendSwitch('enable-native-gpu-memory-buffers')
+app.commandLine.appendSwitch('disable-software-rasterizer')
+app.commandLine.appendSwitch('force-gpu-mem-available-mb', '2048')
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 process.env.APP_ROOT = path.join(__dirname, '../..')
 

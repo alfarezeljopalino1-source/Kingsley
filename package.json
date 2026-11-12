@@ -1,6 +1,6 @@
 {
   "name": "kingsley",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Next-generation bespoke terminal multiplexer and agentic workstation for Windows 11",
   "type": "module",
   "main": "dist-electron/main/index.js",
@@ -15,7 +15,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "pack": "npm run build && electron-builder --win --dir",
-    "dist": "npm run build && electron-builder --win",
+    "dist": "npm run build && electron-builder --win --publish never",
     "dist:portable": "npm run build && electron-builder --win portable",
     "dist:linux": "npm run build && electron-builder --linux",
     "dist:mac": "npm run build && electron-builder --mac",

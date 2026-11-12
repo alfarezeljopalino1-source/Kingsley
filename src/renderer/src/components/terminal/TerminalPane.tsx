@@ -5,7 +5,6 @@ import { WebLinksAddon } from '@xterm/addon-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
 import { useTheme } from '../../context/ThemeContext'
-import { showFileToast } from '../notifications/FileTransferToast'
 import { PaneHeader } from './PaneHeader'
 import { formatPathForPane } from '../../lib/path-format'
 import type { ShellType } from '@shared/types'
@@ -44,6 +43,70 @@ const TerminalPaneComponent: React.FC<TerminalPaneProps> = ({
   const isInitialMountRef = useRef(true)
   const [isExited, setIsExited] = useState(false)
   const [exitCode, setExitCode] = useState<number | null>(null)
+  const shellRef = useRef(shell)
+  shellRef.current = shell
+  const cwdRef = useRef(cwd)
+  cwdRef.current = cwd
+  const lastPasteTimeRef = useRef(0)
+
+  const handlePasteToTerminal = async () => {
+    const now = Date.now()
+    if (now - lastPasteTimeRef.current < 250) return
+    lastPasteTimeRef.current = now
+
+    const api = window.ferminAPI
+    if (!api?.sendInput) return
+
+    const currentCwd = cwdRef.current
+    const currentShell = shellRef.current
+
+    // 1. Text from clipboard
+    try {
+      const text = await navigator.clipboard.readText()
+      if (text) {
+        api.sendInput(paneId, text)
+        return
+      }
+    } catch {}
+
+    // 2. Screenshot / Image in clipboard (e.g. Snipping Tool, Win+Shift+S, PrtScn, copied image)
+    if (api.readClipboardImage) {
+      try {
+        const imgRes = await api.readClipboardImage(currentCwd)
+        if (imgRes?.success && imgRes.path) {
+          const formatted = await formatPathForPane(imgRes.path, {
+            paneId,
+            shell: currentShell,
+            workspacePath: currentCwd,
+          })
+          api.sendInput(paneId, `${formatted} `)
+          return
+        }
+      } catch {}
+    }
+
+    // 3. Fallback: Files copied from Windows Explorer
+    if (api.getClipboardFiles) {
+      try {
+        const fileRes = await api.getClipboardFiles()
+        if (fileRes?.success && fileRes.files?.length) {
+          const formatted = (
+            await Promise.all(
+              fileRes.files.map((p) =>
+                formatPathForPane(p, {
+                  paneId,
+                  shell: currentShell,
+                  workspacePath: currentCwd,
+                })
+              )
+            )
+          ).join(' ')
+          api.sendInput(paneId, `${formatted} `)
+          return
+        }
+      } catch {}
+    }
+  }
 
 
   // Initialize xterm instance
@@ -98,40 +161,7 @@ const TerminalPaneComponent: React.FC<TerminalPaneProps> = ({
 
       // 2. Paste: Ctrl+V or Ctrl+Shift+V
       if (isCtrl && (key === 'v' || arg.code === 'KeyV')) {
-        navigator.clipboard.readText().then(async (text) => {
-          if (text) {
-            window.ferminAPI?.sendInput(paneId, text)
-            return
-          }
-          // Fallback: files copied from Windows Explorer
-          if (window.ferminAPI?.getClipboardFiles) {
-            try {
-              const fileRes = await window.ferminAPI.getClipboardFiles()
-              if (fileRes?.success && fileRes.files?.length) {
-                const formatted = (
-                  await Promise.all(
-                    fileRes.files.map((p) =>
-                      formatPathForPane(p, {
-                        paneId,
-                        shell,
-                        workspacePath: cwd,
-                      })
-                    )
-                  )
-                ).join(' ')
-                window.ferminAPI.sendInput(paneId, `${formatted} `)
-                showFileToast(
-                  fileRes.files.length > 1
-                    ? `${fileRes.files.length} Referensi Ditempel`
-                    : 'Referensi Ditempel ke Terminal',
-                  formatted,
-                  'success'
-                )
-                return
-              }
-            } catch {}
-          }
-        }).catch(() => {})
+        void handlePasteToTerminal()
         return false // Consume event so \x16 is not sent to PTY
       }
 
@@ -381,11 +411,7 @@ const TerminalPaneComponent: React.FC<TerminalPaneProps> = ({
               navigator.clipboard.writeText(sel).catch(() => {})
             }
           } else {
-            navigator.clipboard.readText().then((text) => {
-              if (text && window.ferminAPI) {
-                window.ferminAPI.sendInput(paneId, text)
-              }
-            }).catch(() => {})
+            void handlePasteToTerminal()
           }
         }}
       >

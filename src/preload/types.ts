@@ -33,6 +33,11 @@ export interface CopyOrMoveResult {
   items: Array<{ src: string; dest: string }>
   errors?: string[]
 }
+export interface ScreenshotResult {
+  success: boolean
+  path?: string
+  error?: string
+}
 
 export type WindowAction = 'minimize' | 'maximize' | 'close'
 
@@ -90,6 +95,9 @@ export interface FerminAPI {
   createFile: (parentDir: string, fileName: string) => Promise<{ success: boolean; path?: string; error?: string }>
   showItemInFolder: (targetPath: string) => Promise<{ success: boolean; error?: string }>
   isDir: (targetPath: string) => Promise<{ success: boolean; isDirectory: boolean; name: string }>
+  // Screenshot & Clipboard Image Operations
+  readClipboardImage: (workspacePath?: string) => Promise<ScreenshotResult>
+  saveClipboardDataUrl: (dataUrl: string, workspacePath?: string) => Promise<ScreenshotResult>
 
 }
 

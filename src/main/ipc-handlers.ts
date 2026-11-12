@@ -126,6 +126,66 @@ async function copyOrMoveItem(
 }
 
 // ---------------------------------------------------------------------------
+// Screenshot & Clipboard Image helpers
+// ---------------------------------------------------------------------------
+
+function ensureLocalGitExclude(workspacePath: string): void {
+  try {
+    const gitDir = path.join(workspacePath, '.git')
+    if (!fs.existsSync(gitDir)) return
+    const infoDir = path.join(gitDir, 'info')
+    fs.mkdirSync(infoDir, { recursive: true })
+    const excludeFile = path.join(infoDir, 'exclude')
+    const current = fs.existsSync(excludeFile) ? fs.readFileSync(excludeFile, 'utf8') : ''
+    if (!/^\s*\.kingsley\/?\s*$/m.test(current)) {
+      const prefix = current && !current.endsWith('\n') ? '\n' : ''
+      fs.appendFileSync(excludeFile, `${prefix}.kingsley/\n`, 'utf8')
+    }
+  } catch {
+    // purely cosmetic, never block a screenshot
+  }
+}
+
+function getScreenshotDir(workspacePath?: string): string {
+  try {
+    const candidate = workspacePath ? path.resolve(workspacePath) : ''
+    if (candidate && fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()) {
+      const dir = path.join(candidate, '.kingsley', 'screenshots')
+      fs.mkdirSync(dir, { recursive: true })
+      ensureLocalGitExclude(candidate)
+      return dir
+    }
+  } catch {}
+
+  const dir = path.join(app.getPath('temp'), 'kingsley-screenshots')
+  fs.mkdirSync(dir, { recursive: true })
+  return dir
+}
+
+function buildScreenshotPath(ext = 'png', workspacePath?: string): string {
+  const now = new Date()
+  const yyyy = now.getFullYear()
+  const mm = String(now.getMonth() + 1).padStart(2, '0')
+  const dd = String(now.getDate()).padStart(2, '0')
+  const hh = String(now.getHours()).padStart(2, '0')
+  const min = String(now.getMinutes()).padStart(2, '0')
+  const ss = String(now.getSeconds()).padStart(2, '0')
+  const ms = String(now.getMilliseconds()).padStart(3, '0')
+  const stamp = `${yyyy}${mm}${dd}-${hh}${min}${ss}-${ms}`
+  return path.join(getScreenshotDir(workspacePath), `screenshot-${stamp}.${ext}`)
+}
+
+async function saveScreenshotBuffer(
+  buffer: Buffer,
+  ext = 'png',
+  workspacePath?: string
+): Promise<string> {
+  const dest = buildScreenshotPath(ext, workspacePath)
+  await fs.promises.writeFile(dest, buffer)
+  return dest
+}
+
+// ---------------------------------------------------------------------------
 // Agent CLI detection (walks the PTY process tree, Windows only)
 // ---------------------------------------------------------------------------
 
@@ -539,6 +599,44 @@ export function setupIpcHandlers(mainWindow: BrowserWindow, ptyManager: PtyManag
       return { success: true }
     } catch (err: unknown) {
       return { success: false, error: String(err) }
+    }
+  })
+
+  // Read and save image from system clipboard (e.g. Snipping Tool, Win+Shift+S, PrtScn)
+  ipcMain.handle('clipboard:readImage', async (_event, workspacePath?: string) => {
+    try {
+      const image = clipboard.readImage()
+      if (!image || image.isEmpty()) {
+        return { success: false, error: 'Clipboard tidak berisi gambar.' }
+      }
+      const pngBuffer = image.toPNG()
+      if (!pngBuffer || pngBuffer.length === 0) {
+        return { success: false, error: 'Gagal mengonversi gambar clipboard ke PNG.' }
+      }
+      const savedPath = await saveScreenshotBuffer(pngBuffer, 'png', workspacePath)
+      return { success: true, path: savedPath }
+    } catch (err: unknown) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  // Save base64 / dataUrl image (e.g. from Drag & Drop or HTML5 ClipboardEvent)
+  ipcMain.handle('clipboard:saveDataUrl', async (_event, dataUrl: string, workspacePath?: string) => {
+    try {
+      const match = /^data:image\/([a-zA-Z0-9+.-]+);base64,([\s\S]+)$/.exec(dataUrl || '')
+      if (!match) {
+        return { success: false, error: 'Format gambar tidak valid.' }
+      }
+      const rawExt = match[1].toLowerCase()
+      const ext = rawExt === 'jpeg' ? 'jpg' : rawExt === 'svg+xml' ? 'svg' : rawExt
+      const savedPath = await saveScreenshotBuffer(
+        Buffer.from(match[2], 'base64'),
+        ext,
+        workspacePath
+      )
+      return { success: true, path: savedPath }
+    } catch (err: unknown) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
     }
   })
 

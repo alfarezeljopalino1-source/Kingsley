@@ -814,12 +814,28 @@ export const AppContent: React.FC = () => {
         e.stopPropagation()
         const pane = activePane
         const api = window.ferminAPI
-        if (!pane?.id || !api?.sendInput) {
-          showFileToast(
-            'Tidak Ada Terminal Aktif',
-            'Buka terminal dulu sebelum menempel file.',
-            'info'
-          )
+        if (!pane?.id || !api?.sendInput) return
+
+        const imageFile = clipboardFiles.find((file) => file.type.startsWith('image/'))
+        if (imageFile && api.saveClipboardDataUrl) {
+          const reader = new FileReader()
+          reader.onload = async () => {
+            if (typeof reader.result === 'string') {
+              try {
+                const res = await api.saveClipboardDataUrl(reader.result, activeWorkspace?.path)
+                if (res?.success && res.path) {
+                  const formatted = await formatPathForPane(res.path, {
+                    paneId: pane.id,
+                    shell: pane.shell,
+                    workspaceAgent: activeWorkspace?.agent,
+                    workspacePath: activeWorkspace?.path,
+                  })
+                  api.sendInput(pane.id, `${formatted} `)
+                }
+              } catch {}
+            }
+          }
+          reader.readAsDataURL(imageFile)
           return
         }
 
@@ -833,14 +849,7 @@ export const AppContent: React.FC = () => {
           if (res?.success && res.files?.length) paths.push(...res.files)
         }
 
-        if (paths.length === 0) {
-          showFileToast(
-            'Clipboard Tidak Berisi File',
-            'Copy file dari Explorer dulu, atau seret file langsung ke terminal.',
-            'info'
-          )
-          return
-        }
+        if (paths.length === 0) return
 
         const formatted = (
           await Promise.all(
@@ -855,11 +864,6 @@ export const AppContent: React.FC = () => {
           )
         ).join(' ')
         api.sendInput(pane.id, `${formatted} `)
-        showFileToast(
-          paths.length > 1 ? `${paths.length} Referensi Ditempel` : 'Referensi Ditempel ke Terminal',
-          formatted,
-          'success'
-        )
         return
       }
 
